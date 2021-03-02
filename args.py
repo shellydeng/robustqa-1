@@ -1,5 +1,6 @@
 import argparse
 
+# These are the possible arguments
 def get_train_test_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch-size', type=int, default=16)
