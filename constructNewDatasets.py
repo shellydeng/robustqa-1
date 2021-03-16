@@ -1,6 +1,7 @@
 import json
 import os
 import collections
+import uuid
 
 domains = {
 #   'indomain': ['nat_questions', 'newsqa', 'squad'],
@@ -47,7 +48,8 @@ def construct(originalToParaphrases, dataset_path):
                 # Add the original question
                 qaDict = {
                     'question': qa['question'],
-                    'answers': qa['answers']
+                    'answers': qa['answers'],
+                    'id': qa['id']
                 }
                 newDataset['data'][-1]['paragraphs'][-1]['qas'].append(qaDict)
                 
@@ -60,7 +62,8 @@ def construct(originalToParaphrases, dataset_path):
                         pp_no_null_terminator = pp[0:len(pp)-1]
                         paraphrase_qaDict = {
                             'question': pp_no_null_terminator,
-                            'answers': qa['answers']
+                            'answers': qa['answers'],
+                            'id': uuid.uuid4().hex
                         }
                         newDataset['data'][-1]['paragraphs'][-1]['qas'].append(paraphrase_qaDict)
 
