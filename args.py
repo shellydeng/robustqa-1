@@ -22,5 +22,8 @@ def get_train_test_args():
     parser.add_argument('--sub-file', type=str, default='')
     parser.add_argument('--visualize-predictions', action='store_true')
     parser.add_argument('--eval-every', type=int, default=5000)
+    
+    # Use by training only to load an existing checkpoint
+    parser.add_argument('--checkpoint', type=str, default='none')
     args = parser.parse_args()
     return args
