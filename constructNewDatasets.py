@@ -2,6 +2,7 @@ import json
 import os
 import collections
 import uuid
+import argparse
 
 domains = {
 #   'indomain': ['nat_questions', 'newsqa', 'squad'],
@@ -10,9 +11,10 @@ domains = {
 
 classifications = ['train', 'val']
 
-def construct(originalToParaphrases, dataset_path):
+def construct(originalToParaphrases, dataset_path, useBleu):
     # Make the containing directory and the output file that will contain the augmented dataset
-    output_path = dataset_path + "-augmented"
+    bleu_path = '-bleu' if useBleu else ''
+    output_path = dataset_path + "-augmented" + bleu_path
     if not os.path.exists(os.path.dirname(output_path)):
         try:
             os.makedirs(os.path.dirname(output_path))
@@ -74,9 +76,10 @@ def construct(originalToParaphrases, dataset_path):
     input_file.close()
 
 
-def getOriginalToParaDict(aug_dataset_path, saveToFile=False):
+def getOriginalToParaDict(aug_dataset_path, saveToFile, useBleu):
     # Open the input_file
-    input_path = aug_dataset_path +  "-questions-pps-selected"
+    bleu_path = '-bleu' if useBleu else ''
+    input_path = aug_dataset_path +  "-questions-pps-selected" + bleu_path
     input_file = open(input_path, 'r')
     lines = input_file.readlines()
     lineIndex = 0
@@ -99,7 +102,7 @@ def getOriginalToParaDict(aug_dataset_path, saveToFile=False):
     # to its paraphrases in the output_file
     if (saveToFile):
         # Make the containing directory and the output file
-        output_path = aug_dataset_path +  "-pps-selected-json"
+        output_path = aug_dataset_path +  "-pps-selected-json" + bleu_path
         if not os.path.exists(os.path.dirname(output_path)):
             try:
                 os.makedirs(os.path.dirname(output_path))
@@ -111,19 +114,31 @@ def getOriginalToParaDict(aug_dataset_path, saveToFile=False):
     return originalToParaphrases
 
 
-def main():
+def main(useBleu, saveIntermediate):
     for inOrOut in domains:
         for dataset in domains[inOrOut]:
             for classification in classifications:
                 aug_dataset_path = 'augmentation/datasets/' + inOrOut + '_' + classification + '/' + dataset
                 dataset_path = 'datasets/' + inOrOut + '_' + classification + '/' + dataset
-                originalToParaphrases = getOriginalToParaDict(aug_dataset_path, False)
-                construct(originalToParaphrases, dataset_path)
+                originalToParaphrases = getOriginalToParaDict(aug_dataset_path, saveIntermediate, useBleu)
+                construct(originalToParaphrases, dataset_path, useBleu)
     print("Finished")
 
 
 
 
 if __name__ == "__main__":
-  print("This script is used to add the paraphrase questions to dataset text files.")
-  main()
+    parser = argparse.ArgumentParser(
+        description=("Construct a new dataset."),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--saveIntermediate", type=bool, help=("Save the intermediate output file that store the dictionary mapping from the original questions to its paraphrases in the output_file"), default=False
+    )
+    parser.add_argument(
+        "--useBleu", type=bool, help=("Indicates if the input files were generated using BLEU scoring. If it was generated using cosine similarity, set this to False"), default=False
+    )
+
+    args = parser.parse_args()
+    print("This script is used to add the paraphrase questions to dataset text files.")
+    main(args.useBleu, args.saveIntermediate)

@@ -1,4 +1,5 @@
 import smart_open
+from nltk.translate.bleu_score import sentence_bleu
 smart_open.open = smart_open.smart_open
 from gensim.models import Word2Vec
 from gensim.test.utils import common_texts
@@ -44,20 +45,27 @@ def get_similarity_score(original, paraphrase, vectors=model.wv, vector_size=vec
         paraphrase_feature = np.divide(paraphrase_feature, paraphrase_len)
     return cosine_similarity(original_feature.reshape(1, -1),paraphrase_feature.reshape(1, -1))
 
-def main(numPp, numTop): 
+def main(numPp, numTop, useBleu): 
   for inOrOut in domains:
     for dataset in domains[inOrOut]:
       for classification in classifications:
         dataset_path = 'augmentation/datasets/' + inOrOut + '_' + classification + '/' + dataset
-        selectAndSave(dataset_path, numPp, numTop)
+        selectAndSave(dataset_path, numPp, numTop, useBleu)
   print("Finished")
 
-def selectAndSave(dataset_path, numPp, numTop):
+def get_bleu_score(original, paraphrase):
+    original_list = original.split()
+    paraphrase_list = paraphrase.split()
+    return sentence_bleu([original], paraphrase)
+
+
+def selectAndSave(dataset_path, numPp, numTop, useBleu):
     input_path = dataset_path + "-questions-pps-all"
     print("Starting to select the best {} paraphrases out of the {} paraphrase candidates for each original sentence in the file '{}'".format(numTop, numPp, input_path))
-
+    print("This uses {} as scoring".format('BLEU' if useBleu else "Cosine Similarity."))
     # Get the output path
-    output_path = dataset_path + '-questions-pps-selected'
+    bleu_path = '-bleu' if useBleu else ''
+    output_path = dataset_path + '-questions-pps-selected' + bleu_path
 
     # Make the containing directories if it doesn't already exist
     if not os.path.exists(os.path.dirname(output_path)):
@@ -82,11 +90,18 @@ def selectAndSave(dataset_path, numPp, numTop):
             lineIndex = (groupIndex * groupSize) + ppIndex
             pp = lines[lineIndex]
             if (pp not in paraDict):
-                paraDict[pp] = get_similarity_score(original, pp)[0][0]
+                paraDict[pp] = get_similarity_score(original, pp)[0][0] if not useBleu else get_bleu_score(original, pp)
 
         # Remove any paraphrases with similarity score of 1.0 (bc that signifies an exact match)
-        non_exact_paraList = list(filter(lambda pair: pair[1] < 1 and pair[1] > 0.9, list(paraDict.items())))
-        # Sort in decreasing order by the similarity score
+        non_exact_paraList = []
+
+        # Select those with BLEU of 0.5 > s > 1 OR similarity score of 0.9 > s > 1
+        if useBleu:
+            non_exact_paraList = list(filter(lambda pair: pair[1] < 1 and pair[1] > 0.5, list(paraDict.items())))
+        else:
+            non_exact_paraList = list(filter(lambda pair: pair[1] < 1 and pair[1] > 0.9, list(paraDict.items())))
+
+        # Sort in decreasing order by the similarity/BLEU score
         non_exact_paraList.sort(key=lambda x:x[1], reverse=True)
 
         # Write the original to file, the number of paraphrases chosen, and each chosen paraphrases
@@ -101,6 +116,68 @@ def selectAndSave(dataset_path, numPp, numTop):
     output_file.close()
     input_file.close()
 
+def test():
+    original = "What type of animal steals Thumbelina away?"
+    pps = ["what kind of animal was stealing ?",
+    "what kind of animal steals from here ?",
+    "what kind of animal steal ?",
+    "what kind of animal steal ?",
+    "what kind of animal is steal ?",
+    "what kind of animal steal ?",
+    "what kind of animal rip out ?",
+    "what kind of animal steal ?",
+    "what a animal steal ?",
+    "what kind of animal steal ?"]
+
+    simScores = []
+    bleuScores = []
+    for pp in pps:
+        simScores.append(get_similarity_score(original, pp, model.wv,100)[0][0])
+        bleuScores.append(get_bleu_score(original, pp))
+
+    print(simScores, "\n", bleuScores)
+
+    original2 = "Who helps Mona with the housework and cooking?"
+    pps2 = ["who helps mona with the apartment and cooking ?",
+    "who helps mona and cook ?",
+    "who helps mona with the house and cook ?",
+    "who helps mona with the homework and cook ?",
+    "who helps mona with the kitchen and cooking ?",
+    "who helps mona with your house and cook ?",
+    "who helps mona with cooking ?",
+    "who helps mona with the dishes and cook ?",
+    "who helps mona with cars and cooking ?",
+    "who helps mona with the dishes and cooking ?"]
+
+    simScores2 = []
+    bleuScores2 = []
+    for pp in pps2:
+        simScores2.append(get_similarity_score(original2, pp, model.wv,100)[0][0])
+        bleuScores2.append(get_bleu_score(original2, pp))
+
+    print(simScores2, "\n", bleuScores2)
+
+    original3 = "where are the vampires sailing to ?"
+    pps3 = ["where are vampires sailing ?",
+    "where 's vampires sailing ?",
+    "where are vampires sailing ?",
+    "where are vampires sailing ?",
+    "where are the vampires sailing ?",
+    "where are the vampires sailing ?",
+    "where 's vampires sailing ?",
+    "where 's the vampires flying ?",
+    "where are the vampires sail ?",
+    "where are vampires going to go ?"]
+
+    simScores3 = []
+    bleuScores3 = []
+    for pp in pps3:
+        simScores3.append(get_similarity_score(original3, pp, model.wv,100)[0][0])
+        bleuScores3.append(get_bleu_score(original3, pp))
+
+    print(simScores3, "\n", bleuScores3)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=("Given files with original and its paraphrases, select the best 3 and save the result."),
@@ -112,5 +189,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--numTop", type=str, help=("Maximum number of top paraphrases for each original sentence to pick."), default=3
     )
+    parser.add_argument(
+        "--useBleu", type=bool, help=("Use BLEU scoring if true, else use cosine similarity"), default=False
+    )
+    parser.add_argument(
+        "--test", type=bool, help=("For testing purposes"), default=False
+    )
     args = parser.parse_args()
-    main(args.numPP, args.numTop)
+
+    if (args.test):
+        test()
+    else:
+        main(args.numPP, args.numTop, args.useBleu)
